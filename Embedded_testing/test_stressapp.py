@@ -9,6 +9,7 @@ from requests.exceptions import ConnectionError
 
 base_url = "https://7facbdb5-b28c-46e1-a70f-a00b44f62626.mock.io/api/v1.0/"
 
+
 class TestCases:
     @responses.activate
     def test_software_version(self):
@@ -116,12 +117,13 @@ class TestCases:
         )
         req = requests.get(f"{base_url}system/clock/value")
         req1 = requests.put(f"{base_url}system/clock/value")
+        req2 = requests.get(f"{base_url}system/clock/value")
         assert req.json()['System time'] == datetime.now().strftime("%H:%M")
         assert req.status_code == 200
         assert req1.status_code == 400
         assert req1.text == "Bad request"
         print()
-        if req.json()['System time'] == current_time:
+        if req.json()['System time'] == req2.json()['System time']:
             print("Result = PASS")
         else:
             print("Result = FAIL")
@@ -148,12 +150,12 @@ class TestCases:
         req1 = requests.post(f"{base_url}swupdate/boot-status")
         assert req.json()['api'] == "/api/v1.0/swupdate/boot-status"
         assert req.json()['boot-status'] == "success"
-        assert req.json()['status'] == "pass"
+        assert req.json()['status'] == "Pass"
         assert req.status_code == 200
         assert req1.text == "Method Not Allowed"
         assert req1.status_code == 405
         print()
-        if req.json()['status'] == "fail":
+        if req.json()['status'] == "Fail":
             print("Reset Device")
 
     @responses.activate
@@ -197,62 +199,109 @@ class TestCases:
 
     @responses.activate
     def test_set_imx_register(self):
-        # def request_callback(request):
-        #     payload = json.load(request.body)
-        #     resp_body = [{
-        #         "Status": "Success",
-        #         "register_details": {
-        #             "register": [payload['register']],
-        #             "register_value": [payload['register_value']]
-        #         }
-        #     }]
-        #     return 200, json.dumps(resp_body)
-
+        register, register_value = "0x01", "100"
         responses.post(
             f"{base_url}g2_5mp_camera/set_imx490_register",
-            match=[matchers.urlencoded_params_matcher({"register": "0x01", "register_value": "100"})],
+            match=[matchers.urlencoded_params_matcher({"register": register, "register_value": register_value})],
             json=[{
                 "Status": "Success",
                 "register_details": {
-                    "register": ["0x01"],
-                    "register_value": ["100"]
+                    "register": [register],
+                    "register_value": [register_value]
                 }
             }],
             status=201
         )
-        # responses.add_callback(
-        #     responses.POST,
-        #     f"{base_url}g2_5mp_camera/set_imx490_register",
-        #     callback=request_callback,
-        #     content_type="application/json"
-        # )
+        responses.get(
+            f"{base_url}g2_5mp_camera/set_imx490_register",
+            body="Bad request",
+            status=400
+        )
+
         req = requests.post(f"{base_url}g2_5mp_camera/set_imx490_register",
-                            data={"register": "0x01", "register_value": "100"})
-        # req1 = requests.post(f"{base_url}g2_5mp_camera/set_imx490_register",
-        #                      json.dumps({"register": "0x01", "register_value": "100"}))
-        #
-        # print(req1.json())
+                            data={"register": register, "register_value": register_value})
+
+        req2 = requests.get(f"{base_url}g2_5mp_camera/set_imx490_register",
+                            data={"register": register, "register_value": register_value})
 
         assert req.json()[0]['Status'] == "Success"
         assert req.json()[0]['register_details'] == {
-            "register": ["0x01"],
-            "register_value": ["100"]
+            "register": [register],
+            "register_value": [register_value]
         }
         assert req.status_code == 201
 
+        assert req2.text == "Bad request"
+        assert req2.status_code == 400
+
     @responses.activate
     def test_read_imx_value(self):
-        param = "0x7663"
+        param = "0x76"
         responses.get(
             f"{base_url}g2_5mp_camera/read_imx490_register/{param}",
             json={"Register": f"{param}", "Status": "Success"},
             status=200
         )
+        responses.post(
+            f"{base_url}g2_5mp_camera/read_imx490_register/{param}",
+            body="Method not allowed",
+            status=405
+        )
         req = requests.get(f"{base_url}g2_5mp_camera/read_imx490_register/{param}")
+        req1 = requests.get(f"{base_url}g2_5mp_camera/read_imx490_register/{param}")
         assert req.json()['Register'] == param
         assert req.json()['Status'] == "Success"
+
         print(int(param, 16))
 
     @responses.activate
     def test_stressapptest(self):
-        pass
+        def request_callback(request):
+            payload = json.loads(request.body)
+            resp_body = {"memory": payload['memory'], "copy_threads": payload['copy_threads'],
+                         "cpu_threads": payload['cpu_threads'], "time": payload['time'],
+                         "stressful-memory": payload['stressful-memory'], "tempfile": payload['tempfile'],
+                         "persist": payload['persist'], "enable": payload['enable']}
+            headers = {"request-id": "728d329e-0e86-11e4-a748-0c84dc037c13"}
+            return (200, headers, json.dumps(resp_body))
+
+        responses.add_callback(
+            responses.post,
+            f"{base_url}hardware_test/stressapptest",
+            callback=request_callback,
+            content_type="application/json",
+        )
+        req = requests.post(
+            f"{base_url}hardware_test/stressapptest",
+            json.dumps(
+                {"memory": "512", "copy_threads": "8",
+                 "cpu_threads": "8", "time": "10",
+                 "stressful-memory": False, "tempfile": ["tempfile1", "tempfile2"],
+                 "persist": False, "enable": True}
+            ),
+            headers={"content-type": "application/json"}
+        )
+        print(req.json())
+
+    # @responses.activate
+    # def test_calc_api(self):
+    #     def request_callback(request):
+    #         payload = json.loads(request.body)
+    #         resp_body = {"value": payload["numbers"]}
+    #         headers = {"request-id": "728d329e-0e86-11e4-a748-0c84dc037c13"}
+    #         return 200, headers, json.dumps(resp_body)
+    #
+    #     responses.add_callback(
+    #         responses.POST,
+    #         "http://calc.com/sum",
+    #         callback=request_callback,
+    #         content_type="application/json",
+    #     )
+    #
+    #     resp = requests.post(
+    #         "http://calc.com/sum",
+    #         json.dumps({"numbers": [1, 2, 3]}),
+    #         headers={"content-type": "application/json"},
+    #     )
+    #
+    #     print(resp.json())
