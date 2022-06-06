@@ -6,6 +6,7 @@ import pytest
 from datetime import datetime
 from responses import matchers
 from requests.exceptions import ConnectionError
+from responses.registries import OrderedRegistry
 
 base_url = "https://7facbdb5-b28c-46e1-a70f-a00b44f62626.mock.io/api/v1.0/"
 
@@ -234,7 +235,7 @@ class TestCases:
         assert req2.text == "Bad request"
         assert req2.status_code == 400
 
-    @responses.activate
+    @responses.activate(registry=OrderedRegistry)
     def test_read_imx_value(self):
         param = "0x76"
         responses.get(
@@ -242,15 +243,29 @@ class TestCases:
             json={"Register": f"{param}", "Status": "Success"},
             status=200
         )
-        responses.post(
+        responses.get(
             f"{base_url}g2_5mp_camera/read_imx490_register/{param}",
-            body="Method not allowed",
-            status=405
+            body="Internal server error",
+            status=500
         )
+        # responses.post(
+        #     f"{base_url}g2_5mp_camera/read_imx490_register/{param}",
+        #     body="Method not allowed",
+        #     status=405
+        # )
         req = requests.get(f"{base_url}g2_5mp_camera/read_imx490_register/{param}")
-        req1 = requests.get(f"{base_url}g2_5mp_camera/read_imx490_register/{param}")
         assert req.json()['Register'] == param
         assert req.json()['Status'] == "Success"
+        assert req.url == f"{base_url}g2_5mp_camera/read_imx490_register/{param}"
+
+        req1 = requests.get(f"{base_url}g2_5mp_camera/read_imx490_register/{param}")
+        assert req1.status_code == 500
+        assert req1.text == "Internal server error"
+        assert req1.url == f"{base_url}g2_5mp_camera/read_imx490_register/{param}"
+
+        # req2 = requests.get(f"{base_url}g2_5mp_camera/read_imx490_register/{param}")
+        # assert req2.text == "Method not allowed"
+        # assert req2.status_code == 405
 
         print(int(param, 16))
 
@@ -262,14 +277,16 @@ class TestCases:
                          "cpu_threads": payload['cpu_threads'], "time": payload['time'],
                          "stressful-memory": payload['stressful-memory'], "tempfile": payload['tempfile'],
                          "persist": payload['persist'], "enable": payload['enable']}
+            # resp_body = {"value": payload['memory']}
             headers = {"request-id": "728d329e-0e86-11e4-a748-0c84dc037c13"}
-            return (200, headers, json.dumps(resp_body))
+            return 200, headers, json.dumps(resp_body)
 
         responses.add_callback(
-            responses.post,
+            responses.POST,
             f"{base_url}hardware_test/stressapptest",
             callback=request_callback,
             content_type="application/json",
+            status=200
         )
         req = requests.post(
             f"{base_url}hardware_test/stressapptest",
@@ -281,7 +298,10 @@ class TestCases:
             ),
             headers={"content-type": "application/json"}
         )
-        print(req.json())
+        assert req.status_code == 200
+        assert req.url == f"{base_url}hardware_test/stressapptest"
+        assert req.headers == {"content-type": "application/json"}
+        print("\n", req.json())
 
     # @responses.activate
     # def test_calc_api(self):
