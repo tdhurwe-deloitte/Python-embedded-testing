@@ -1,3 +1,5 @@
+import json
+
 import requests
 import responses
 from responses import matchers
@@ -132,7 +134,28 @@ class TestCasesRebootReason:
 
     @responses.activate
     def test_stress_ng(self):
-        pass
+        def request_callback(request):
+            payload = json.loads(request.body)
+            resp_body = {"cpu": payload['cpu'], "io": payload["io"], "vm": payload['vm'],
+                         "vm-bytes": payload['vm-bytes'], "time": payload['time'], "temp-path": payload['temp-path'],
+                         "backoff": payload['backoff'], "persist": payload['persist'], "enable": payload['enable']}
+            headers = {"request-id": "728d329e-0e86-11e4-a748-0c84dc037c13"}
+            return 201, headers, json.dumps(resp_body)
+
+        responses.add_callback(
+            responses.POST,
+            f"{base_url}hardware/stressng",
+            callback=request_callback
+        )
+        req = requests.post(
+            f"{base_url}hardware/stressng",
+            json.dumps({"cpu": "8", "io": "4", "vm": '2',
+                        "vm-bytes": "56889", "time": "10 min", "temp-path": "temppath",
+                        "backoff": "200", "persist": True, "enable": True}),
+            headers={"content-type": "application/json"}
+        )
+        assert req.status_code == 201
+        assert req.url == f"{base_url}hardware/stressng"
 
     @responses.activate
     def test_stress_ng_status(self):
