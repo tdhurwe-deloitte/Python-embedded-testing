@@ -285,8 +285,7 @@ class TestCases:
             responses.POST,
             f"{base_url}hardware_test/stressapptest",
             callback=request_callback,
-            content_type="application/json",
-            status=200
+            content_type="application/json"
         )
         req = requests.post(
             f"{base_url}hardware_test/stressapptest",
@@ -300,7 +299,7 @@ class TestCases:
         )
         assert req.status_code == 200
         assert req.url == f"{base_url}hardware_test/stressapptest"
-        assert req.headers == {"content-type": "application/json"}
+        assert req.headers == {"Content-Type": "application/json","request-id": "728d329e-0e86-11e4-a748-0c84dc037c13"}
         print("\n", req.json())
 
     # @responses.activate
